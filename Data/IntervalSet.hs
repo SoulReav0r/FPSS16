@@ -11,22 +11,22 @@ type Interval = (Int, Int)
 
 overlap :: Interval -> Interval -> Bool
 overlap (x1, y1) (x2, y2)
-  = undefined
+  = (x1 <= (y2+1)) && (x2 <= (y1+1))
 
 
 less :: Interval -> Interval -> Bool
 less (_x1, y1) (x2, _y2)
-  = undefined
+  = y1 < x2
 
 
 nullInterval :: Interval -> Bool
 nullInterval (x, y)
-  = undefined
+  = x > y
 
 
 -- merge 2 (overlapping) intervals
 merge :: Interval -> Interval -> Interval
-merge = undefined
+merge (x1, y1) (x2, y2) = (x1 `min` x2, y1 `max` y2)
 
 
 -- ----------------------------------------
@@ -38,7 +38,9 @@ merge = undefined
 type IntervalSet = [Interval]
 
 inv :: IntervalSet -> Bool
-inv = undefined
+inv [] = True
+inv (x: []) = not (emptyInterval x)
+inv (x0: (x1:xs)) = not(emptyInterval x0) && not(emptyInterval x1) && x0 `less` x1 && not (x0 `overlap` x1) && inv (x1:xs)
 
 
 -- ----------------------------------------
@@ -50,11 +52,22 @@ singleInterval x y
     | otherwise = []
 
 insertInterval :: Interval -> IntervalSet -> IntervalSet
-insertInterval = undefined
+insertInterval i []  
+        | emptyInterval i = empty
+        | otherwise = [i]
+
+insertInterval i (x:xs) 
+        | emptyInterval i = (x:xs)
+        | overlap i x =  insertInterval (merge i x) xs
+        | not (less i x) = x : (insertInterval i xs)
+        | otherwise = (i : (x : xs))
+
+
 
 
 fromIntervalList :: [(Int, Int)] -> IntervalSet
-fromIntervalList = undefined
+fromIntervalList =
+        foldr insertInterval empty
 
 
 -- ----------------------------------------
@@ -71,19 +84,32 @@ insert :: Int -> IntervalSet -> IntervalSet
 insert i = insertInterval (i, i)
 
 union :: IntervalSet -> IntervalSet -> IntervalSet
-union = undefined
+union [] y = y
+union x [] = x
+union (x:xs) y = union xs (insertInterval x y)
 
 
 member :: Int -> IntervalSet -> Bool
-member = undefined
+member i = 
+        foldr func False
+        where
+                func (lb, ub) acc = (i >= lb && i <= ub) || acc
+         
+fromList :: [Int] -> IntervalSet
+fromList [] = empty
+fromList (x:xs) = union (singleton x) (fromList xs)
+
 
 
 fromList :: [Int] -> IntervalSet
-fromList = undefined
+fromList [] = empty
+fromList (x:xs) = union (singleton x) (fromList xs)
 
 
 toList :: IntervalSet -> [Int]
-toList = undefined
-
+toList = 
+        foldr func []
+        where
+                func (lb, ub) l = [lb..ub] ++ l
 
 -- ----------------------------------------
