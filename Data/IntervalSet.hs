@@ -23,7 +23,6 @@ nullInterval :: Interval -> Bool
 nullInterval (x, y)
   = x > y
 
-
 -- merge 2 (overlapping) intervals
 merge :: Interval -> Interval -> Interval
 merge (x1, y1) (x2, y2) = (x1 `min` x2, y1 `max` y2)
@@ -39,9 +38,8 @@ type IntervalSet = [Interval]
 
 inv :: IntervalSet -> Bool
 inv [] = True
-inv (x: []) = not (emptyInterval x)
-inv (x0: (x1:xs)) = not(emptyInterval x0) && not(emptyInterval x1) && x0 `less` x1 && not (x0 `overlap` x1) && inv (x1:xs)
-
+inv (x: []) = not (nullInterval x)
+inv (x0: (x1:xs)) = not(nullInterval x0) && not(nullInterval x1) && x0 `less` x1 && not (x0 `overlap` x1) && inv (x1:xs)
 
 -- ----------------------------------------
 -- internal interval set ops
@@ -53,16 +51,13 @@ singleInterval x y
 
 insertInterval :: Interval -> IntervalSet -> IntervalSet
 insertInterval i []  
-        | emptyInterval i = empty
+        | nullInterval i = empty
         | otherwise = [i]
-
 insertInterval i (x:xs) 
-        | emptyInterval i = (x:xs)
+        | nullInterval i = (x:xs)
         | overlap i x =  insertInterval (merge i x) xs
         | not (less i x) = x : (insertInterval i xs)
         | otherwise = (i : (x : xs))
-
-
 
 
 fromIntervalList :: [(Int, Int)] -> IntervalSet
@@ -95,11 +90,6 @@ member i =
         where
                 func (lb, ub) acc = (i >= lb && i <= ub) || acc
          
-fromList :: [Int] -> IntervalSet
-fromList [] = empty
-fromList (x:xs) = union (singleton x) (fromList xs)
-
-
 
 fromList :: [Int] -> IntervalSet
 fromList [] = empty
