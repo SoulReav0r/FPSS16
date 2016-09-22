@@ -26,11 +26,10 @@ prop_inv0 = inv . fromList
 prop_inv :: [Pair] -> Bool
 prop_inv = inv . fromPairs
 
-
 -- all elements in set?
 prop_elem :: [Pair] -> Bool
 prop_elem ps = and (map isIn ps)
-        where 
+        where
                 s = fromPairs ps
                 isIn (P (x,y)) = all (`member` s) [x..y]
 
