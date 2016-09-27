@@ -26,6 +26,7 @@ data Tree a
     | Bin (Tree a) (Tree a)
       deriving (Show, Data, Typeable)
 
+baum = Bin ( Bin (Tip 1) (Tip 2)) (Bin (Tip 3) (Tip 4))
 -- | data type invariant
 
 invTree :: Tree a -> Bool
@@ -37,14 +38,20 @@ invTree (Bin l r) = invTree l && invTree r
 
 -- | smart constructor
 bin :: Tree a -> Tree a -> Tree a
-bin  = undefined
+bin Null r = r
+bin l Null = l
+bin l r = Bin l r
 
 instance Functor Tree where
-  fmap = undefined
+  fmap f Null = Null
+  fmap f (Tip a) = Tip(f a)
+  fmap f (Bin a b) = Bin (fmap f a) (fmap f b)
 
 instance Applicative Tree where
-  pure  = undefined
-  (<*>) = undefined
+  pure a  = Tip a
+  Null <*> t = Null
+  (Tip a) <*> t = fmap a t
+  (Bin a b) <*> t = Bin (a <*> t) (b <*> t)
 
 instance Monad Tree where
   return     = undefined
@@ -59,8 +66,8 @@ instance MonadPlus Tree where
   mplus = undefined
 
 instance Monoid (Tree a) where
-  mempty  = undefined
-  mappend = undefined
+  mempty  = Null
+  mappend = Bin
 
 -- fold elements like in a list from right to left
 instance Foldable Tree where
@@ -70,27 +77,41 @@ instance Foldable Tree where
 -- classical visitor
 
 visitTree :: b -> (a -> b) -> (b -> b -> b) -> Tree a -> b
-visitTree e tf bf = visit'
+visitTree e tf bf = visit' -- tf= tip function;  bf= bin function jeder Parameter eine Funktion des Datentyps
   where
-    visit' = undefined
+    visit' Null = e
+    visit' (Tip x) = tf x
+    visit' (Bin l r) = bf (visit' l) (visit' r)
 
 -- special visitors
 
 sizeTree :: Tree a -> Int
-sizeTree = visitTree undefined undefined undefined
+sizeTree = visitTree 0 (const 1) (+)
 
 minDepth, maxDepth :: Tree a -> Int
-minDepth = visitTree undefined undefined undefined
-maxDepth = visitTree undefined undefined undefined
+minDepth = visitTree 0 (const 1) (\x y -> (x `min` y) +1)
+maxDepth = visitTree 0 (const 1) (\x y -> (x `max` y) +1)
 
 -- ----------------------------------------
 -- access functions
+-- linker Teilbaum
 
 viewL :: Tree a -> Maybe (a, Tree a)
-viewL = undefined
+viewL Null = Nothing
+viewL (Tip a) = Just (a, Null)
+viewL (Bin a b) =
+  Just (l, bin b rt)
+  where
+    (Just (l, rt)) = viewL a
+-- rechter Teilbaum
 
 viewR :: Tree a -> Maybe (Tree a, a)
-viewR = undefined
+viewR Null = Nothing
+viewR (Tip a) = Just (Null, a)
+viewR (Bin a b) =
+    Just (bin a rt, r )
+    where
+      (Just (rt, r)) = viewR b
 
 head :: Tree a -> a
 head = maybe (error "head: empty tree") fst . viewL

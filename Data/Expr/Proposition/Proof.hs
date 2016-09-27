@@ -12,7 +12,11 @@ import           Data.Maybe                       (listToMaybe)
 -- ----------------------------------------
 
 truthTable :: Int -> [[Bool]]
-truthTable n = undefined
+truthTable n
+  | n == 0 = [[]]
+  | otherwise = map (True :) t' ++ map (False :) t'
+    where
+  t' = truthTable (n-1)
 
 -- compute a proof by generating a truth table,
 -- iterate over all rows in the table
@@ -24,7 +28,13 @@ truthTable n = undefined
 
 proof' :: Expr -> Maybe VarEnv
 proof' e
-  = undefined
+ = func environments e
+ where
+  environments = map (zipWith (\x y -> (x, Lit y)) freeVarList) (truthTable (length (freeVarList)))
+  freeVarList = freeVars e
+  func [] e = if eval e then Nothing else Just []
+  func (env:[]) e = if eval (substVars env e) then Nothing else Just env
+  func (env:envs) e = if eval (substVars env e) then func envs e else Just env
 
 
 proof :: Expr -> String
