@@ -21,7 +21,7 @@ names = [['a'..'z']] ++ [ c: (show i) |  i <- [1..] , c <- ['a'..'z'] ]
 fibs :: [Integer]
 
 fibs = 0 : 1 : zipWith (+) fibs (tail fibs)
-                          
+
 -- ----------------------------------------
 --
 -- | naive prime number generator with
@@ -64,13 +64,13 @@ merge :: [Integer] -> [Integer] -> [Integer]
 
 merge xs     []     = xs
 merge []     ys     = ys
-merge (x:xs) (y:ys) 
+merge (x:xs) (y:ys)
                     | x == y = x : merge xs ys
-                    | x > y = y : merge (x:xs) ys 
+                    | x > y = y : merge (x:xs) ys
                     | y > x = x : merge xs (y:ys)
 
 
-                    
+
 -- | @merges@ takes a list of lists of ascending integers
 -- and merges these lists into a single sorted list without any duplicates
 -- direct impl
@@ -85,6 +85,6 @@ merges (x:xs) = merge x (merges xs)
 -- | @merges@ with a fold
 
 merges' :: [[Integer]] -> [Integer]
-merges' = undefined    -- after chapter about folds
+merges' = foldr merge []    -- after chapter about folds
 
 -- ----------------------------------------

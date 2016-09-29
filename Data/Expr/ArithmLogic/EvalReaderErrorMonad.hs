@@ -1,21 +1,28 @@
+{-# LANGUAGE TypeSynonymInstances  #-}
+{-# LANGUAGE FlexibleInstances     #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 
-module Data.Expr.ArithmLogic.EvalErrorMonad where
+module Data.Expr.ArithmLogic.EvalReaderErrorMonad where
 
 import Control.Applicative (Applicative(..))
 import Control.Monad
 import Control.Monad.Except
+import Control.Monad.Reader
 
 import Data.Expr.ArithmLogic.Types
 import Data.Pretty
 
--- ----------------------------------------
---
--- simple expression evaluation with error handling
---
--- evaluates expressions without any free or bound variable
+import Data.Map (Map)
+import qualified Data.Map as M
 
 -- ----------------------------------------
+-- simple expression evaluation in monadic form
+--
+-- evaluates expressions with free variables and local let bindings
+
+-- ----------------------------------------
+--
+-- the pure value
 
 data Value
   = B Bool
@@ -35,36 +42,67 @@ isI (I _) = True
 isI _     = False
 
 -- ----------------------------------------
+--
+-- the Value / Error sum type
 
-data Result a
-  = R { resVal :: a         }
+data ResVal a
+  = R { resVal :: a}
   | E { resErr :: EvalError }
     deriving (Show)
 
+instance Functor ResVal where
+  fmap f (R x) = R (f x)
+  fmap _ (E e) = E e
+
+instance Applicative ResVal where
+  pure = return
+  (<*>) = ap
+
+instance Monad ResVal where
+  return = R
+  R x >>= f = f x
+  E e >>= _ = E e
+
+instance MonadError EvalError ResVal where
+  throwError = E
+  catchError r@(R _) _ = r
+  catchError   (E e) f = f e
+
+instance (Pretty a) => Pretty (ResVal a) where
+  pretty (R x) = pretty x
+  pretty (E e) = "error: " ++ pretty e
+
+-- ----------------------------------------
+
+type Env = Map Ident Value
+
+newtype Result a = RR { unRR :: Env -> ResVal a }
+
 instance Functor Result where
-  fmap f (R v) = R (f v)
-  fmap f (E m) = (E m)
-
-
+  fmap f r = r >>= return . f
 
 instance Applicative Result where
   pure = return
   (<*>) = ap
 
 instance Monad Result where
-  return = R
-  (R v) >>= f = f v
-  (E m) >>= f = (E m)
-
+  return a = RR  (\x -> return a)
+  -- Result a -> (a -> Result b) -> Result b
+  m >>= f = RR (\x ->  do
+                          a <- unRR m x
+                          unRR (f a) x)
 
 instance MonadError EvalError Result where
-  throwError = E
-  (R v) `catchError` _ = (R v)
-  (E m) `catchError` h = h m
+  throwError e
+    = RR (\x -> throwError e)
+  catchError (RR ef) handler
+    = RR (\x -> catchError (ef x) (\e -> unRR (handler e) x))
 
-instance (Pretty a) => Pretty (Result a) where
-  pretty (R x) = pretty x
-  pretty (E e) = "error: " ++ pretty e
+
+instance MonadReader Env Result where
+  ask             = RR (\x -> return x)
+  local f (RR ef) = RR (\x -> ef (f x))
+
 
 -- ----------------------------------------
 -- error handling
@@ -74,7 +112,6 @@ data EvalError
   | NotImpl String
   | ValErr  String Value
   | Div0
-  | Mzero
   deriving (Show)
 
 instance Pretty EvalError where
@@ -82,7 +119,6 @@ instance Pretty EvalError where
   pretty (NotImpl n)  = n ++ " not implemented"
   pretty (ValErr e g) = e ++ " value expected, but got: " ++ pretty g
   pretty Div0         = "divide by zero"
-  pretty Mzero        = "mzero"
 
 boolExpected :: Value -> Result a
 boolExpected = throwError . ValErr "Bool"
@@ -101,12 +137,20 @@ div0  = throwError Div0
 
 -- ----------------------------------------
 
+eval' :: Expr -> ResVal Value
+eval' e = (unRR . eval) e M.empty -- start with an empty environment
+
 eval :: Expr -> Result Value
 eval (BLit b)          = return (B b)
 eval (ILit i)          = return (I i)
-eval (Var    x)        = freeVar x
+eval (Var    x)        = do env <- ask
+                            let maybeValue = M.lookup x env in
+                              case maybeValue of
+                                Nothing -> freeVar x
+                                Just a -> return a
 eval (Unary  op e1)    = do v1  <- eval e1
                             mf1 op v1
+
 eval (Binary op e1 e2) = do v1  <- eval e1
                             v2  <- eval e2
                             mf2 op v1 v2
@@ -116,17 +160,17 @@ eval (Cond   c e1 e2)  = do b <- evalBool c
                               then eval e1
                               else eval e2
 
-eval (Let _x _e1 _e2)  = notImpl "let"
+eval (Let x e1 e2)     = do r <- eval e1
+                            local (M.insert x r) (eval e2)
 
 evalBool :: Expr -> Result Bool
 evalBool e
   = do r <- eval e
        case r of
         (B b) -> return b
-        (I i) -> boolExpected (I i)
+        _     -> boolExpected r
 
 -- ----------------------------------------
--- MF: Meaning function
 
 type MF1 = Value -> Result Value
 
@@ -175,24 +219,28 @@ mf2 op        = \ _ _ -> notImpl (pretty op)
 
 op2BBB :: (Bool -> Bool -> Bool) -> MF2
 op2BBB op (B b1) (B b2) = return (B (b1 `op` b2))
-op2BBB _  _      (I i2) = boolExpected (I i2)
-op2BBB _  (I i1) _      = boolExpected (I i1)
+op2BBB _  v1     v2
+  | not (isB v1)        = boolExpected v1
+  | otherwise           = boolExpected v2
 
 op2III :: (Integer -> Integer -> Integer) -> MF2
 op2III op (I i1) (I i2) = return (I (i1 `op` i2))
-op2III _  (B b1) _      = intExpected (B b1)
-op2III _  _      (B b2) = intExpected (B b2)
+op2III _  v1      v2
+  | not (isI v1)        = intExpected v1
+  | otherwise           = intExpected v2
 
 op2IIB :: (Integer -> Integer -> Bool) -> MF2
 op2IIB op (I i1) (I i2) = return (B (i1 `op` i2))
-op2IIB _  (B b1) _      = intExpected (B b1)
-op2IIB _  _      (B b2) = intExpected (B b2)
-
+op2IIB _  v1      v2
+  | not (isI v1)        = intExpected v1
+  | otherwise           = intExpected v2
 
 divIII :: (Integer -> Integer -> Integer) -> MF2
-divIII op (I _) (I 0)   = div0
-divIII op (I x) (I y)   = return (I (x `op` y))
-divIII _  (B b1) _      = intExpected (B b1)
-divIII _  _     (B b2)  = intExpected (B b2)
+divIII op (I x) (I y)
+  | y == 0              = div0
+  | otherwise           = return (I (x  `op` y))
+divIII _  v1      v2
+  | not (isI v1)        = intExpected v1
+  | otherwise           = intExpected v2
 
 -- ----------------------------------------

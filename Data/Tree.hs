@@ -54,16 +54,18 @@ instance Applicative Tree where
   (Bin a b) <*> t = Bin (a <*> t) (b <*> t)
 
 instance Monad Tree where
-  return     = undefined
-  _    >>= _ = undefined
+  return = Tip
+  Null    >>= _ = Null
+  (Tip a) >>= f = f a
+  (Bin a b) >>= f = Bin (a >>= f) (b >>= f)
 
 instance Alternative Tree where
   empty = mzero   -- or Null
   (<|>) = mplus
 
 instance MonadPlus Tree where
-  mzero = undefined
-  mplus = undefined
+  mzero = Null
+  a `mplus` b = Bin a b
 
 instance Monoid (Tree a) where
   mempty  = Null
@@ -71,7 +73,10 @@ instance Monoid (Tree a) where
 
 -- fold elements like in a list from right to left
 instance Foldable Tree where
-  foldr _ e t = undefined
+  -- (a -> b -> b) -> b -> t a -> b
+   foldr _ e Null = e
+   foldr ft e (Tip a) = ft a e
+   foldr ft e (Bin a b) = foldr ft (foldr ft e b) a
 
 -- ----------------------------------------
 -- classical visitor
@@ -130,11 +135,11 @@ init = maybe (error "init: empty tree") fst . viewR
 
 -- | runs in O(n) due to the use of (:)
 toList :: Tree a -> [a]
-toList = foldr undefined undefined
+toList = foldr (:) []
 
 -- | runs in O(n^2) due to the use of (++)
 toListSlow :: Tree a -> [a]
-toListSlow = visitTree undefined undefined undefined
+toListSlow = visitTree [] (\x -> [x]) (\x y -> x ++ y)
 
 -- | build a balanced tree
 --
@@ -142,11 +147,18 @@ toListSlow = visitTree undefined undefined undefined
 
 -- weak balancing criterion
 fromList :: [a] -> Tree a
-fromList = undefined
+fromList = fromList'
 
 -- strong balancing criterion
 fromList' :: [a] -> Tree a
-fromList' = undefined
+fromList' [] = Null
+fromList' (x:[]) = Tip x
+fromList' l =
+  bin (fromList' (lh l)) (fromList' (rh l))
+  where
+    lh l = take (mid l) l
+    rh l = drop (mid l) l
+    mid l = (length l) `div` 2
 
 -- list to the right
 fromList'' :: [a] -> Tree a

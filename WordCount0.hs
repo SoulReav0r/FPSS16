@@ -43,9 +43,9 @@ processText t
 -- process a single line
 toCounters :: T.Text -> Counters
 toCounters line
-  = (Sum 1,              -- line count
-     (Sum (length (T.words line)),             -- word count
-      (Sum (T.length line) ,            -- char count
+  = (Sum 1,
+     (Sum (length (T.words line)),
+      (Sum (T.length line) ,
        ())))
 
 -- --------------------
